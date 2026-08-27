@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bitbucket Readable Diff Extractor
 // @namespace    https://bitbucket.org/
-// @version      1.6.1
+// @version      1.7.0
 // @description  Extract Bitbucket Cloud PR diffs as readable unified-diff text, with per-file buttons, API full-diff support, and the ability to hide PR comments from configured authors (e.g. bots).
 // @match        https://bitbucket.org/*
 // @connect      api.bitbucket.org
@@ -1735,8 +1735,11 @@
     const commentFilter = {
         storageKeyAuthors: "bb-readable-diff-blocked-authors",
         storageKeyEnabled: "bb-readable-diff-hide-comments-enabled",
+        storageKeyResolved: "bb-readable-diff-hide-resolved-enabled",
         defaultAuthors: ["DSO-PR-Bot"],
-        processedAttribute: "data-bb-comment-filtered"
+        processedAttribute: "data-bb-comment-filtered",
+        reasonAuthor: "author",
+        reasonResolved: "resolved"
     };
 
     function getStoredJson(key, fallback) {
@@ -1783,6 +1786,14 @@
 
     function setCommentFilterEnabled(enabled) {
         setStoredJson(commentFilter.storageKeyEnabled, Boolean(enabled));
+    }
+
+    function isHideResolvedEnabled() {
+        return getStoredJson(commentFilter.storageKeyResolved, false) === true;
+    }
+
+    function setHideResolvedEnabled(enabled) {
+        setStoredJson(commentFilter.storageKeyResolved, Boolean(enabled));
     }
 
     function getCommentAuthor(commentElement) {
@@ -1877,7 +1888,7 @@
                 continue;
             }
 
-            container.setAttribute(commentFilter.processedAttribute, "true");
+            container.setAttribute(commentFilter.processedAttribute, commentFilter.reasonAuthor);
             container.setAttribute("aria-hidden", "true");
             container.style.display = "none";
             hiddenCount += 1;
@@ -1886,10 +1897,45 @@
         return hiddenCount;
     }
 
-    function restoreHiddenComments() {
-        const selector = `[${commentFilter.processedAttribute}="true"]`;
+    function isResolvedThread(container) {
+        return normalizeWhitespace(container.textContent).includes("resolved this comment thread");
+    }
+
+    function hideResolvedComments() {
+        if (!isHideResolvedEnabled()) {
+            return 0;
+        }
+
+        let hiddenCount = 0;
+
+        for (const commentElement of document.querySelectorAll('[data-testid="comment"]')) {
+            const container = findCommentThreadContainer(commentElement);
+
+            if (!container || container.hasAttribute(commentFilter.processedAttribute)) {
+                continue;
+            }
+
+            if (!isResolvedThread(container)) {
+                continue;
+            }
+
+            container.setAttribute(commentFilter.processedAttribute, commentFilter.reasonResolved);
+            container.setAttribute("aria-hidden", "true");
+            container.style.display = "none";
+            hiddenCount += 1;
+        }
+
+        return hiddenCount;
+    }
+
+    function restoreHiddenComments(reason) {
+        const selector = `[${commentFilter.processedAttribute}]`;
 
         for (const container of document.querySelectorAll(selector)) {
+            if (reason && container.getAttribute(commentFilter.processedAttribute) !== reason) {
+                continue;
+            }
+
             container.style.display = "";
             container.removeAttribute("aria-hidden");
             container.removeAttribute(commentFilter.processedAttribute);
@@ -1907,7 +1953,7 @@
 
         lastCommentToastAt = now;
         showToast(
-            `Hidden ${count} comment${count === 1 ? "" : "s"} from blocked author${count === 1 ? "" : "s"}.`,
+            `Hidden ${count} comment thread${count === 1 ? "" : "s"}.`,
             "info"
         );
     }
@@ -1956,31 +2002,55 @@
         body.style.flexDirection = "column";
         body.style.gap = "14px";
 
-        const toggleRow = document.createElement("label");
-        toggleRow.style.display = "flex";
-        toggleRow.style.alignItems = "center";
-        toggleRow.style.gap = "8px";
-        toggleRow.style.cursor = "pointer";
-        toggleRow.style.fontSize = "13px";
-        toggleRow.style.color = "#172b4d";
+        const createToggleRow = (labelText, initialValue, onChange) => {
+            const row = document.createElement("label");
+            row.style.display = "flex";
+            row.style.alignItems = "center";
+            row.style.gap = "8px";
+            row.style.cursor = "pointer";
+            row.style.fontSize = "13px";
+            row.style.color = "#172b4d";
 
-        const toggle = document.createElement("input");
-        toggle.type = "checkbox";
-        toggle.checked = isCommentFilterEnabled();
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = initialValue;
 
-        const toggleLabel = document.createElement("span");
-        toggleLabel.textContent = "Hide comments from blocked authors";
+            const label = document.createElement("span");
+            label.textContent = labelText;
 
-        toggleRow.appendChild(toggle);
-        toggleRow.appendChild(toggleLabel);
+            row.appendChild(checkbox);
+            row.appendChild(label);
 
-        toggle.addEventListener("change", () => {
-            setCommentFilterEnabled(toggle.checked);
+            checkbox.addEventListener("change", () => {
+                onChange(checkbox.checked);
+            });
 
-            if (!toggle.checked) {
-                restoreHiddenComments();
+            return row;
+        };
+
+        const authorToggleRow = createToggleRow(
+            "Hide comments from blocked authors",
+            isCommentFilterEnabled(),
+            (checked) => {
+                setCommentFilterEnabled(checked);
+
+                if (!checked) {
+                    restoreHiddenComments(commentFilter.reasonAuthor);
+                }
             }
-        });
+        );
+
+        const resolvedToggleRow = createToggleRow(
+            "Hide resolved comments",
+            isHideResolvedEnabled(),
+            (checked) => {
+                setHideResolvedEnabled(checked);
+
+                if (!checked) {
+                    restoreHiddenComments(commentFilter.reasonResolved);
+                }
+            }
+        );
 
         const listLabel = document.createElement("div");
         listLabel.textContent = "Blocked authors";
@@ -2088,7 +2158,8 @@
             }
         });
 
-        body.appendChild(toggleRow);
+        body.appendChild(authorToggleRow);
+        body.appendChild(resolvedToggleRow);
         body.appendChild(listLabel);
         body.appendChild(list);
         body.appendChild(addRow);
@@ -2345,7 +2416,9 @@
         let scheduleTimer = null;
 
         const runCommentFilter = () => {
-            const hiddenCount = hideBlockedComments();
+            const authorHidden = hideBlockedComments();
+            const resolvedHidden = hideResolvedComments();
+            const hiddenCount = authorHidden + resolvedHidden;
 
             if (hiddenCount > 0) {
                 notifyCommentsHidden(hiddenCount);
