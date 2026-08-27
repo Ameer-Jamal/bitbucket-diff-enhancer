@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bitbucket Readable Diff Extractor
 // @namespace    https://bitbucket.org/
-// @version      1.6.0
+// @version      1.6.1
 // @description  Extract Bitbucket Cloud PR diffs as readable unified-diff text, with per-file buttons, API full-diff support, and the ability to hide PR comments from configured authors (e.g. bots).
 // @match        https://bitbucket.org/*
 // @connect      api.bitbucket.org
@@ -1812,14 +1812,42 @@
         return "";
     }
 
-    function findCommentThreadContainer(commentElement) {
-        const portal = commentElement.closest('[id^="portal-parent-"]');
+    function containsDiffCode(element) {
+        return Boolean(
+            element.querySelector(selectors.code) ||
+            element.querySelector(selectors.row)
+        );
+    }
 
-        if (portal) {
+    function findCommentThreadContainer(commentElement) {
+        const portal = commentElement.closest('[id^="portal-parent-"]')
+            || commentElement.closest('[data-thread-controls-managed="true"]')
+            || commentElement;
+
+        const fileContainer = portal.closest('article[data-qa="branch-diff-file"]')
+            || portal.closest(selectors.file);
+
+        if (!fileContainer) {
             return portal;
         }
 
-        return commentElement.closest('[data-thread-controls-managed="true"]') || commentElement;
+        // The portal only holds the portaled content; the visible "card" (with
+        // its own border/background) is an ancestor of it. Climb up until we hit
+        // a parent that actually contains diff code, then hide that card so no
+        // empty box is left behind.
+        let node = portal;
+        let container = portal;
+
+        while (node.parentElement && node.parentElement !== fileContainer) {
+            node = node.parentElement;
+            container = node;
+
+            if (containsDiffCode(node.parentElement)) {
+                break;
+            }
+        }
+
+        return container;
     }
 
     function hideBlockedComments() {
