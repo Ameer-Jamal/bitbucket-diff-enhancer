@@ -150,6 +150,9 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
     const DEBUG = false;
 
     const SETTINGS_LOCAL_REPO_ROOT = "bb-readable-diff-local-repo-root";
+    const SETTINGS_THEME = "bb-readable-diff-theme";
+    const SETTINGS_CODE_FONT = "bb-readable-diff-code-font";
+    const SETTINGS_EXTERNAL_TOOLS = "bb-readable-diff-external-tools";
 
     const ids = {
         pageToolbar: "bb-readable-diff-header-actions",
@@ -196,7 +199,14 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             text: "#172b4d",
             muted: "#5e6c84",
             toastBg: "#172b4d",
-            toastColor: "#ffffff"
+            toastColor: "#ffffff",
+            diff: {
+                header: "#6f42c1",
+                hunk: "#0052cc",
+                add: "#00875a",
+                remove: "#de350b",
+                context: "#172b4d"
+            }
         },
         dark: {
             overlay: "rgba(0, 0, 0, 0.6)",
@@ -208,9 +218,31 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             text: "#c7d1db",
             muted: "#9fadbc",
             toastBg: "#101214",
-            toastColor: "#e6edf3"
+            toastColor: "#e6edf3",
+            diff: {
+                header: "#c792ea",
+                hunk: "#6cb6ff",
+                add: "#7ee787",
+                remove: "#ff7b72",
+                context: "#c7d1db"
+            }
         }
     };
+
+    const FONT_OPTIONS = [
+        { label: "Default", value: "Menlo, Monaco, Consolas, 'Courier New', monospace" },
+        { label: "SF Mono", value: "'SF Mono', Menlo, monospace" },
+        { label: "Fira Code", value: "'Fira Code', 'SF Mono', Menlo, monospace" },
+        { label: "JetBrains Mono", value: "'JetBrains Mono', Menlo, monospace" },
+        { label: "Cascadia Code", value: "'Cascadia Code', Menlo, monospace" },
+        { label: "Source Code Pro", value: "'Source Code Pro', Menlo, monospace" },
+        { label: "IBM Plex Mono", value: "'IBM Plex Mono', Menlo, monospace" }
+    ];
+
+    const DEFAULT_EXTERNAL_TOOLS = [
+        { name: "VS Code", template: "vscode://file/{path}" },
+        { name: "JetBrains IDEA", template: "jetbrains://idea/navigate/reference?project={repoSlug}&path={path}" }
+    ];
 
     function isDarkTheme() {
         const htmlTheme = document.documentElement.getAttribute("data-theme") ||
@@ -224,6 +256,16 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
     }
 
     function getTheme() {
+        const preference = getStoredJson(SETTINGS_THEME, "auto");
+
+        if (preference === "light") {
+            return themePalettes.light;
+        }
+
+        if (preference === "dark") {
+            return themePalettes.dark;
+        }
+
         return isDarkTheme() ? themePalettes.dark : themePalettes.light;
     }
 
@@ -1770,33 +1812,57 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         filterInput.style.background = theme.inputBg;
         filterInput.style.color = theme.text;
 
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.readOnly = true;
-        textarea.spellcheck = false;
-        textarea.style.flex = "1";
-        textarea.style.width = "100%";
-        textarea.style.resize = "none";
-        textarea.style.border = "0";
-        textarea.style.outline = "none";
-        textarea.style.padding = "12px";
-        textarea.style.fontFamily = "Menlo, Monaco, Consolas, monospace";
-        textarea.style.fontSize = "12px";
-        textarea.style.lineHeight = "1.45";
-        textarea.style.whiteSpace = "pre";
-        textarea.style.color = theme.text;
-        textarea.style.background = theme.panelBg;
+        let currentText = text;
+
+        const viewer = document.createElement("div");
+        viewer.style.flex = "1";
+        viewer.style.overflow = "auto";
+        viewer.style.background = theme.panelBg;
+        viewer.style.padding = "12px";
+
+        const pre = document.createElement("pre");
+        pre.style.margin = "0";
+        pre.style.fontFamily = getCodeFont();
+        pre.style.fontSize = "12px";
+        pre.style.lineHeight = "1.45";
+        pre.style.whiteSpace = "pre";
+
+        viewer.appendChild(pre);
+
+        const renderViewer = () => {
+            pre.innerHTML = "";
+            const palette = getTheme().diff;
+
+            for (const line of currentText.split("\n")) {
+                const kind = BbDiffEnhancer.classifyDiffLine(line);
+                const span = document.createElement("span");
+                span.textContent = line;
+                span.style.color = palette[kind] || palette.context;
+
+                if (kind === "add") {
+                    span.style.background = "rgba(0, 135, 90, 0.08)";
+                } else if (kind === "remove") {
+                    span.style.background = "rgba(222, 53, 11, 0.08)";
+                }
+
+                pre.appendChild(span);
+                pre.appendChild(document.createTextNode("\n"));
+            }
+        };
+
+        renderViewer();
 
         const getFilteredText = () => filterDiffByFilename(text, filterInput.value);
 
         filterInput.addEventListener("input", () => {
-            textarea.value = getFilteredText();
+            currentText = getFilteredText();
+            renderViewer();
         });
 
         toolbar.appendChild(filterInput);
 
         actions.appendChild(createButton("Copy", async () => {
-            await copyToClipboard(textarea.value);
+            await copyToClipboard(currentText);
         }));
 
         actions.appendChild(createButton("Copy filtered", async () => {
@@ -1804,7 +1870,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         }, { compact: true, title: "Copy filtered diff" }));
 
         actions.appendChild(createButton("Download", () => {
-            downloadText(downloadFileName, textarea.value);
+            downloadText(downloadFileName, currentText);
         }));
 
         actions.appendChild(createButton("Download filtered", () => {
@@ -1822,12 +1888,9 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
         panel.appendChild(header);
         panel.appendChild(toolbar);
-        panel.appendChild(textarea);
+        panel.appendChild(viewer);
         overlay.appendChild(panel);
         document.body.appendChild(overlay);
-
-        textarea.focus();
-        textarea.select();
 
         overlay.addEventListener("click", (event) => {
             if (event.target === overlay) {
@@ -1964,7 +2027,10 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         commentFilter.storageKeyEnabled,
         commentFilter.storageKeyResolved,
         commentFilter.storageKeyNotifications,
-        SETTINGS_LOCAL_REPO_ROOT
+        SETTINGS_LOCAL_REPO_ROOT,
+        SETTINGS_THEME,
+        SETTINGS_CODE_FONT,
+        SETTINGS_EXTERNAL_TOOLS
     ];
 
     function getLocalRepoRoot() {
@@ -1973,6 +2039,71 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
     function setLocalRepoRoot(root) {
         setStoredJson(SETTINGS_LOCAL_REPO_ROOT, root);
+    }
+
+    function getCodeFont() {
+        return getStoredJson(SETTINGS_CODE_FONT, FONT_OPTIONS[0].value) || FONT_OPTIONS[0].value;
+    }
+
+    function setCodeFont(font) {
+        setStoredJson(SETTINGS_CODE_FONT, font);
+    }
+
+    function getThemePreference() {
+        return getStoredJson(SETTINGS_THEME, "auto") || "auto";
+    }
+
+    function setThemePreference(preference) {
+        setStoredJson(SETTINGS_THEME, preference);
+    }
+
+    function getExternalTools() {
+        const stored = getStoredJson(SETTINGS_EXTERNAL_TOOLS, null);
+
+        if (!Array.isArray(stored) || stored.length === 0) {
+            return DEFAULT_EXTERNAL_TOOLS.slice();
+        }
+
+        return stored
+            .filter((tool) => tool && tool.name && tool.template)
+            .map((tool) => ({ name: tool.name, template: tool.template }));
+    }
+
+    function setExternalTools(tools) {
+        setStoredJson(SETTINGS_EXTERNAL_TOOLS, tools);
+    }
+
+    function buildExternalUrl(template, filePath) {
+        const root = getLocalRepoRoot().replace(/\/+$/, "");
+        const relative = String(filePath || "").replace(/^\/+/, "");
+        const absolute = root ? root + "/" + relative : relative;
+
+        const pageInfo = parsePullRequestUrl();
+        const repoSlug = pageInfo ? pageInfo.workspace + "/" + pageInfo.repoSlug : "";
+
+        return String(template || "")
+            .replace(/\{path\}/g, absolute)
+            .replace(/\{repo\}/g, root)
+            .replace(/\{file\}/g, relative)
+            .replace(/\{repoSlug\}/g, repoSlug);
+    }
+
+    function openExternalTool(template, filePath) {
+        const root = getLocalRepoRoot().replace(/\/+$/, "");
+
+        if (!root) {
+            showToast("Set your local repository path in the comment filter settings first.", "warning");
+            return;
+        }
+
+        const url = buildExternalUrl(template, filePath);
+
+        if (!url) {
+            showToast("Invalid external tool URL.", "error");
+            return;
+        }
+
+        globalThis.location.href = url;
     }
 
     function exportSettings() {
@@ -2003,18 +2134,6 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
                 setStoredJson(key, parsed[key]);
             }
         }
-    }
-
-    function openFileInVsCode(filePath) {
-        const root = getLocalRepoRoot().replace(/\/+$/, "");
-
-        if (!root) {
-            showToast("Set your local repository path in the comment filter settings first.", "warning");
-            return;
-        }
-
-        const uri = "vscode://file/" + root + "/" + String(filePath || "").replace(/^\/+/, "");
-        globalThis.location.href = uri;
     }
 
     function getCommentAuthor(commentElement) {
@@ -2320,6 +2439,67 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             }
         );
 
+        const createSelectField = (labelText, options, selectedValue, onChange) => {
+            const field = document.createElement("div");
+            field.style.display = "flex";
+            field.style.flexDirection = "column";
+            field.style.gap = "4px";
+
+            const label = document.createElement("div");
+            label.textContent = labelText;
+            label.style.fontSize = "12px";
+            label.style.fontWeight = "700";
+            label.style.color = theme.muted;
+            label.style.textTransform = "uppercase";
+            field.appendChild(label);
+
+            const select = document.createElement("select");
+            select.style.height = "30px";
+            select.style.padding = "0 8px";
+            select.style.border = "1px solid " + theme.border;
+            select.style.borderRadius = "4px";
+            select.style.fontSize = "13px";
+            select.style.background = theme.inputBg;
+            select.style.color = theme.text;
+
+            for (const option of options) {
+                const optionElement = document.createElement("option");
+                optionElement.value = option.value;
+                optionElement.textContent = option.label;
+
+                if (option.value === selectedValue) {
+                    optionElement.selected = true;
+                }
+
+                select.appendChild(optionElement);
+            }
+
+            select.addEventListener("change", () => {
+                onChange(select.value);
+            });
+
+            field.appendChild(select);
+            return field;
+        };
+
+        const themeSelectField = createSelectField(
+            "Theme",
+            [
+                { label: "Auto", value: "auto" },
+                { label: "Light", value: "light" },
+                { label: "Dark", value: "dark" }
+            ],
+            getThemePreference(),
+            (value) => setThemePreference(value)
+        );
+
+        const fontSelectField = createSelectField(
+            "Diff viewer font",
+            FONT_OPTIONS,
+            getCodeFont(),
+            (value) => setCodeFont(value)
+        );
+
         const listLabel = document.createElement("div");
         listLabel.textContent = "Blocked authors";
         listLabel.style.fontSize = "12px";
@@ -2507,6 +2687,8 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         body.appendChild(authorToggleRow);
         body.appendChild(resolvedToggleRow);
         body.appendChild(notificationsToggleRow);
+        body.appendChild(themeSelectField);
+        body.appendChild(fontSelectField);
         body.appendChild(listLabel);
         body.appendChild(listHint);
         body.appendChild(list);
@@ -2601,6 +2783,73 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         return null;
     }
 
+    function extractPrMetadataFromDom() {
+        const pickText = (selectors) => {
+            for (const selector of selectors) {
+                const element = document.querySelector(selector);
+
+                if (element && element.textContent.trim()) {
+                    return normalizeWhitespace(element.textContent).trim();
+                }
+            }
+
+            return "";
+        };
+
+        return {
+            title: pickText(['[data-testid="pr-title"]', 'h1[data-testid="pull-request-title"]', "h1"]),
+            author: "",
+            sourceBranch: pickText(['[data-testid="source-branch-name"]', '[data-qa="source-branch-name"]']),
+            destinationBranch: pickText(['[data-testid="destination-branch-name"]', '[data-qa="destination-branch-name"]']),
+            description: ""
+        };
+    }
+
+    async function getPrMetadata() {
+        const pageInfo = parsePullRequestUrl();
+
+        if (!pageInfo || pageInfo.type !== "pullrequest") {
+            return {};
+        }
+
+        let metadata = null;
+
+        try {
+            metadata = await fetchPullRequestMetadata(pageInfo);
+        } catch {
+            metadata = null;
+        }
+
+        if (!metadata || !metadata.title) {
+            metadata = extractPullRequestMetadataFromPage() || metadata;
+        }
+
+        const dom = extractPrMetadataFromDom();
+        const resolved = metadata || {};
+
+        return {
+            title: resolved.title || dom.title || "",
+            author: (resolved.author && (resolved.author.display_name || resolved.author.nickname)) || dom.author || "",
+            sourceBranch: (resolved.source && resolved.source.branch && resolved.source.branch.name) || dom.sourceBranch || "",
+            destinationBranch: (resolved.destination && resolved.destination.branch && resolved.destination.branch.name) || dom.destinationBranch || "",
+            description: resolved.description || dom.description || ""
+        };
+    }
+
+    async function getDiffstatTotals(pageInfo) {
+        try {
+            const diffstat = await fetchPullRequestDiffstat(pageInfo);
+
+            return {
+                files: diffstat.length,
+                added: diffstat.reduce((sum, entry) => sum + (entry.lines_added || 0), 0),
+                removed: diffstat.reduce((sum, entry) => sum + (entry.lines_removed || 0), 0)
+            };
+        } catch {
+            return { files: 0, added: 0, removed: 0 };
+        }
+    }
+
     async function getPullRequestSummary() {
         const pageInfo = parsePullRequestUrl();
 
@@ -2608,71 +2857,42 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             throw new Error("This action works on a pull request page.");
         }
 
-        const metadata = await fetchPullRequestMetadata(pageInfo);
-        const diffstat = await fetchPullRequestDiffstat(pageInfo);
-        const title = metadata.title || "";
-        const author = (metadata.author && (metadata.author.display_name || metadata.author.nickname)) || "";
-        const sourceBranch = (metadata.source && metadata.source.branch && metadata.source.branch.name) || "";
-        const destinationBranch = (metadata.destination && metadata.destination.branch && metadata.destination.branch.name) || "";
-        const ticket = BbDiffEnhancer.extractJiraTicket(title + " " + sourceBranch);
-        const added = diffstat.reduce((sum, entry) => sum + (entry.lines_added || 0), 0);
-        const removed = diffstat.reduce((sum, entry) => sum + (entry.lines_removed || 0), 0);
+        const meta = await getPrMetadata();
+        const totals = await getDiffstatTotals(pageInfo);
+        const ticket = BbDiffEnhancer.extractJiraTicket(meta.title + " " + meta.sourceBranch);
 
         return BbDiffEnhancer.buildPullRequestSummary({
-            title,
+            title: meta.title,
             url: globalThis.location.href,
-            author,
+            author: meta.author,
             ticket,
-            sourceBranch,
-            destinationBranch,
-            files: diffstat.length,
-            added,
-            removed
+            sourceBranch: meta.sourceBranch,
+            destinationBranch: meta.destinationBranch,
+            files: totals.files,
+            added: totals.added,
+            removed: totals.removed,
+            description: meta.description
         });
     }
 
     async function getAiReviewPrompt() {
-        const pageInfo = parsePullRequestUrl();
         const result = await extractFullDiff();
-        let title = "";
-        let sourceBranch = "";
-        let destinationBranch = "";
-
-        if (pageInfo && pageInfo.type === "pullrequest") {
-            try {
-                const metadata = await fetchPullRequestMetadata(pageInfo);
-                title = metadata.title || "";
-                sourceBranch = (metadata.source && metadata.source.branch && metadata.source.branch.name) || "";
-                destinationBranch = (metadata.destination && metadata.destination.branch && metadata.destination.branch.name) || "";
-            } catch {
-                // metadata is optional for the prompt
-            }
-        }
+        const meta = await getPrMetadata();
 
         return BbDiffEnhancer.buildAiReviewPrompt({
-            title,
-            sourceBranch,
-            destinationBranch,
+            title: meta.title,
+            sourceBranch: meta.sourceBranch,
+            destinationBranch: meta.destinationBranch,
             diff: result.text
         });
     }
 
     async function getReviewTemplate(type) {
-        const pageInfo = parsePullRequestUrl();
-        let title = "";
-
-        if (pageInfo && pageInfo.type === "pullrequest") {
-            try {
-                const metadata = await fetchPullRequestMetadata(pageInfo);
-                title = metadata.title || "";
-            } catch {
-                // title is optional for the template
-            }
-        }
+        const meta = await getPrMetadata();
 
         return BbDiffEnhancer.buildReviewTemplate({
             type,
-            title,
+            title: meta.title,
             url: globalThis.location.href
         });
     }
@@ -2691,7 +2911,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         }
     }, true);
 
-    function createMenuButton(label, items) {
+    function createMenuButton(label, items, options = {}) {
         const theme = getTheme();
 
         const container = document.createElement("div");
@@ -2713,7 +2933,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         menu.style.padding = "4px";
         menu.style.overflow = "hidden";
 
-        const button = createButton(label, () => {
+        const toggleMenu = () => {
             const isOpen = menu.style.display !== "none";
             closeAllMenus();
 
@@ -2721,7 +2941,11 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
                 menu.style.display = "block";
                 openMenus.push(menu);
             }
-        }, { compact: true, title: "More actions" });
+        };
+
+        const button = options.iconSvg
+            ? createIconButton(options.iconSvg, options.title || label, toggleMenu)
+            : createButton(label, toggleMenu, { compact: true, title: options.title || "More actions" });
 
         for (const item of items) {
             const itemButton = document.createElement("button");
@@ -2874,7 +3098,14 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
                         showToast("Changes-requested template copied.");
                     }
                 }
-            ]));
+            ].concat(
+                getLocalRepoRoot()
+                    ? getExternalTools().map((tool) => ({
+                        label: "Open repository in " + tool.name,
+                        onClick: () => openExternalTool(tool.template, "")
+                    }))
+                    : []
+            )));
 
             wrapper.appendChild(group);
             insertionPoint.parentElement.insertBefore(wrapper, insertionPoint);
@@ -2940,8 +3171,14 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         }));
 
         if (getLocalRepoRoot()) {
-            group.appendChild(createIconButton(CODE_ICON_SVG, "Open in VS Code", () => {
-                openFileInVsCode(filePath);
+            const tools = getExternalTools().map((tool) => ({
+                label: "Open in " + tool.name,
+                onClick: () => openExternalTool(tool.template, filePath)
+            }));
+
+            group.appendChild(createMenuButton("", tools, {
+                iconSvg: CODE_ICON_SVG,
+                title: "Open file in external tool"
             }));
         }
 
@@ -2955,23 +3192,6 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         for (const fileElement of fileElements) {
             addFileButtons(fileElement);
         }
-    }
-
-    function isInitComplete() {
-        const toolbar = document.getElementById(ids.pageToolbar);
-        const fileElements = document.querySelectorAll(selectors.file);
-
-        if (!toolbar) {
-            return false;
-        }
-
-        if (fileElements.length === 0) {
-            return Boolean(parsePullRequestUrl());
-        }
-
-        return Array.from(fileElements).every(
-            (fileElement) => fileElement.getAttribute(attributes.fileButtonsAdded) === "true"
-        );
     }
 
     function startCommentFiltering() {
@@ -3004,22 +3224,10 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
     function init() {
         let debounceTimer = null;
-        let observer = null;
-        let intervalId = null;
 
         const runInit = () => {
             addPageToolbar();
             addFileButtonsToVisibleFiles();
-
-            if (isInitComplete()) {
-                observer?.disconnect();
-                observer = null;
-
-                if (intervalId != null) {
-                    globalThis.clearInterval(intervalId);
-                    intervalId = null;
-                }
-            }
         };
 
         const debouncedInit = () => {
@@ -3029,44 +3237,31 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
         runInit();
 
-        observer = new MutationObserver(debouncedInit);
+        // Keep the observer (and the interval) running for the life of the page:
+        // Bitbucket lazy-loads diff files as you scroll, so newly mounted files
+        // must still get their buttons.
+        const observer = new MutationObserver(debouncedInit);
 
         observer.observe(document.documentElement, {
             childList: true,
             subtree: true
         });
 
-        intervalId = globalThis.setInterval(runInit, 1500);
+        globalThis.setInterval(runInit, 1500);
 
-        const onNavigation = () => {
-            if (intervalId == null) {
-                intervalId = globalThis.setInterval(runInit, 1500);
-            }
-
-            if (!observer) {
-                observer = new MutationObserver(debouncedInit);
-                observer.observe(document.documentElement, {
-                    childList: true,
-                    subtree: true
-                });
-            }
-
-            debouncedInit();
-        };
-
-        globalThis.addEventListener("popstate", onNavigation);
+        globalThis.addEventListener("popstate", debouncedInit);
 
         const originalPushState = history.pushState.bind(history);
         const originalReplaceState = history.replaceState.bind(history);
 
         history.pushState = (...args) => {
             originalPushState(...args);
-            onNavigation();
+            debouncedInit();
         };
 
         history.replaceState = (...args) => {
             originalReplaceState(...args);
-            onNavigation();
+            debouncedInit();
         };
     }
 

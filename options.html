@@ -42,6 +42,20 @@
     </section>
 
     <section class="card">
+      <h2>Appearance</h2>
+      <div class="grid">
+        <label class="field">
+          <span class="field-label"><strong>Theme</strong></span>
+          <select id="theme"></select>
+        </label>
+        <label class="field">
+          <span class="field-label"><strong>Diff viewer font</strong></span>
+          <select id="code-font"></select>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Blocked authors</h2>
       <p class="hint">
         Case-insensitive patterns. Use <code>*</code> for any characters and
@@ -58,9 +72,24 @@
       <h2>Integrations</h2>
       <label class="field">
         <span class="field-label"><strong>Local repository path</strong></span>
-        <small>Absolute path to this repo's local checkout, used for the per-file "Open in VS Code" button.</small>
+        <small>Absolute path to this repo's local checkout, used for the per-file "Open in external tool" button.</small>
         <input type="text" id="local-repo-root" placeholder="/absolute/path/to/your/local/repo">
       </label>
+    </section>
+
+    <section class="card">
+      <h2>External tools</h2>
+      <p class="hint">
+        Open files (and the repository) in your editor or terminal. Use the
+        placeholders <code>{path}</code>, <code>{repo}</code>, <code>{file}</code>,
+        and <code>{repoSlug}</code>.
+      </p>
+      <div class="add-row">
+        <input type="text" id="new-tool-name" placeholder="Name (e.g. Warp)">
+        <input type="text" id="new-tool-template" placeholder="URL template (e.g. warp://open/{path})">
+        <button id="add-tool" class="btn">Add</button>
+      </div>
+      <ul id="tool-list" class="author-list"></ul>
     </section>
 
     <section class="card">

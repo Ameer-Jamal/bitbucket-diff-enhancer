@@ -154,3 +154,23 @@ test("buildReviewTemplate supports approval and changes", () => {
     const changes = core.buildReviewTemplate({ type: "changes", title: "My PR" });
     assert.match(changes, /Requesting changes: My PR/);
 });
+
+test("classifyDiffLine classifies unified diff lines", () => {
+    assert.equal(core.classifyDiffLine("diff --git a/f b/f"), "header");
+    assert.equal(core.classifyDiffLine("--- a/f"), "header");
+    assert.equal(core.classifyDiffLine("+++ b/f"), "header");
+    assert.equal(core.classifyDiffLine("@@ -1,3 +1,3 @@"), "hunk");
+    assert.equal(core.classifyDiffLine("+added"), "add");
+    assert.equal(core.classifyDiffLine("-removed"), "remove");
+    assert.equal(core.classifyDiffLine(" context"), "context");
+});
+
+test("buildPullRequestSummary includes a truncated description", () => {
+    const summary = core.buildPullRequestSummary({
+        title: "T",
+        description: "  some\n\nmulti-line description  ".repeat(50)
+    });
+
+    assert.match(summary, /Description: some multi-line description/);
+    assert.ok(summary.indexOf("Description:") < summary.length);
+});

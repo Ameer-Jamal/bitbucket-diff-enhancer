@@ -7,21 +7,25 @@ pull requests easier to review.
 
 - **Readable diffs** — view, copy, or download a PR diff as clean `diff --git`
   text, per file or for the whole pull request (uses the Bitbucket API for full
-  diffs, with a DOM fallback).
+  diffs, with a DOM fallback). The viewer has syntax highlighting and a
+  configurable font/theme.
 - **Comment filter** — hide inline comments from authors you choose (e.g. bots
   like `DSO-PR-Bot`). Patterns support `*`/`?` wildcards (e.g. `*bot*`), and are
   case-insensitive.
 - **Hide resolved comments** — collapse away resolved comment threads so only
   open feedback remains.
-- **Copy PR summary** — title, URL, author, Jira ticket, branches, files changed,
-  and `+/-` lines in one click.
+- **Copy PR summary** — title, URL, author, Jira ticket, branches, description,
+  files changed, and `+/-` lines in one click.
 - **Copy for AI review** — copies the full diff plus a ready-made review prompt
   for ChatGPT/Claude.
 - **Review templates** — pre-filled approval and "changes requested" messages.
-- **Open in VS Code** — per-file deep link into your local checkout.
+- **Open in external tools** — per-file (or whole-repository) deep links into
+  your editor/terminal (VS Code, JetBrains, Warp, etc.) via configurable URL
+  templates.
 - **Options page** — a full settings page, plus **export/import** to share
   configuration with teammates.
-- **Dark theme** — injected buttons and modals follow Bitbucket's theme.
+- **Dark theme** — injected buttons, modals, and the diff viewer follow
+  Bitbucket's theme (with a manual auto/light/dark override).
 - **Settings UI** — a gear icon next to each file's diff buttons, or the
   **Comment filter** button in the PR header.
 
