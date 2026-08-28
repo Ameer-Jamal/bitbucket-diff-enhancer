@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bitbucket Diff Enhancer — Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Bitbucket Diff Enhancer</h1>
+      <p class="subtitle">Configure diff extraction and comment filtering for Bitbucket Cloud.</p>
+    </header>
+
+    <section class="card">
+      <h2>Comment filtering</h2>
+
+      <label class="toggle">
+        <input type="checkbox" id="hide-comments">
+        <span class="toggle-body">
+          <strong>Hide comments from blocked authors</strong>
+          <small>Hides inline comments from the blocked author patterns below.</small>
+        </span>
+      </label>
+
+      <label class="toggle">
+        <input type="checkbox" id="hide-resolved">
+        <span class="toggle-body">
+          <strong>Hide resolved comments</strong>
+          <small>Removes resolved comment threads from the diff view.</small>
+        </span>
+      </label>
+
+      <label class="toggle">
+        <input type="checkbox" id="show-notifications">
+        <span class="toggle-body">
+          <strong>Show hidden-comment notifications</strong>
+          <small>Displays a toast when comment threads are hidden.</small>
+        </span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Blocked authors</h2>
+      <p class="hint">
+        Case-insensitive patterns. Use <code>*</code> for any characters and
+        <code>?</code> for a single character (e.g. <code>*bot*</code>).
+      </p>
+      <div class="add-row">
+        <input type="text" id="new-author" placeholder="Author pattern (e.g. DSO-PR-Bot or *bot*)">
+        <button id="add-author" class="btn">Add</button>
+      </div>
+      <ul id="author-list" class="author-list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Integrations</h2>
+      <label class="field">
+        <span class="field-label"><strong>Local repository path</strong></span>
+        <small>Absolute path to this repo's local checkout, used for the per-file "Open in VS Code" button.</small>
+        <input type="text" id="local-repo-root" placeholder="/absolute/path/to/your/local/repo">
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Settings data</h2>
+      <div class="btn-row">
+        <button id="export-settings" class="btn">Export settings</button>
+        <button id="import-settings" class="btn">Import settings</button>
+      </div>
+      <textarea id="import-area" class="import-area" placeholder="Paste exported settings JSON here…" hidden></textarea>
+      <button id="apply-import" class="btn" hidden>Apply import</button>
+    </section>
+
+    <footer>
+      <button id="reset" class="btn btn-danger">Reset to defaults</button>
+      <span id="status" class="status" aria-live="polite"></span>
+    </footer>
+  </main>
+
+  <script src="options.js"></script>
+</body>
+</html>

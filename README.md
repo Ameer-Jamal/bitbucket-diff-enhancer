@@ -13,9 +13,17 @@ pull requests easier to review.
   case-insensitive.
 - **Hide resolved comments** — collapse away resolved comment threads so only
   open feedback remains.
+- **Copy PR summary** — title, URL, author, Jira ticket, branches, files changed,
+  and `+/-` lines in one click.
+- **Copy for AI review** — copies the full diff plus a ready-made review prompt
+  for ChatGPT/Claude.
+- **Review templates** — pre-filled approval and "changes requested" messages.
+- **Open in VS Code** — per-file deep link into your local checkout.
+- **Options page** — a full settings page, plus **export/import** to share
+  configuration with teammates.
+- **Dark theme** — injected buttons and modals follow Bitbucket's theme.
 - **Settings UI** — a gear icon next to each file's diff buttons, or the
-  **Comment filter** button in the PR header. Includes per-feature toggles,
-  notification preferences, and a reset-to-defaults action.
+  **Comment filter** button in the PR header.
 
 ## Install
 
@@ -37,6 +45,7 @@ userscript manager.
 ├── manifest.json               # Chrome MV3 manifest
 ├── background.js               # Service worker: cross-origin fetches
 ├── content.js                  # Content script: diff extraction + comment filtering
+├── options.html/js/css         # Full settings page (export/import, etc.)
 ├── lib/
 │   └── core.js                 # Shared pure logic (glob matching, diff helpers)
 ├── test/

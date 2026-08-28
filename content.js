@@ -131,10 +131,25 @@ function loadStoredSettings() {
     });
 }
 
+// Keep the in-memory settings cache in sync with the options page.
+if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== "local") {
+            return;
+        }
+
+        for (const [key, change] of Object.entries(changes || {})) {
+            __bbDiffEnhancerSettings[key] = change.newValue;
+        }
+    });
+}
+
 (function () {
     "use strict";
 
     const DEBUG = false;
+
+    const SETTINGS_LOCAL_REPO_ROOT = "bb-readable-diff-local-repo-root";
 
     const ids = {
         pageToolbar: "bb-readable-diff-header-actions",
@@ -169,6 +184,48 @@ function loadStoredSettings() {
     };
 
     const normalizeWhitespace = BbDiffEnhancer.normalizeWhitespace;
+
+    const themePalettes = {
+        light: {
+            overlay: "rgba(9, 30, 66, 0.54)",
+            panelBg: "#ffffff",
+            toolbarBg: "#fafbfc",
+            rowBg: "#f4f5f7",
+            inputBg: "#ffffff",
+            border: "#dfe1e6",
+            text: "#172b4d",
+            muted: "#5e6c84",
+            toastBg: "#172b4d",
+            toastColor: "#ffffff"
+        },
+        dark: {
+            overlay: "rgba(0, 0, 0, 0.6)",
+            panelBg: "#1d2125",
+            toolbarBg: "#161a1d",
+            rowBg: "#22272b",
+            inputBg: "#22272b",
+            border: "#2c333a",
+            text: "#c7d1db",
+            muted: "#9fadbc",
+            toastBg: "#101214",
+            toastColor: "#e6edf3"
+        }
+    };
+
+    function isDarkTheme() {
+        const htmlTheme = document.documentElement.getAttribute("data-theme") ||
+            document.documentElement.getAttribute("data-color-mode");
+
+        if (htmlTheme) {
+            return htmlTheme === "dark";
+        }
+
+        return Boolean(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+
+    function getTheme() {
+        return isDarkTheme() ? themePalettes.dark : themePalettes.light;
+    }
 
     function getFilePath(fileElement) {
         const ariaLabel = fileElement.getAttribute("aria-label") || "";
@@ -1568,6 +1625,11 @@ function loadStoredSettings() {
         '<path d="M19.14 12.94c.04-.3.06-.61.06-.94s-.02-.64-.06-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84a.49.49 0 0 0-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.3-.06.62-.06.94s.02.64.06.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.37 1.03.7 1.62.94l.36 2.54c.04.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/>' +
         '</svg>';
 
+    const CODE_ICON_SVG =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="display:block;">' +
+        '<path d="M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6z"/>' +
+        '</svg>';
+
     function closeModal() {
         for (const modalId of [ids.modal, ids.settingsModal]) {
             const modal = document.getElementById(modalId);
@@ -1581,12 +1643,14 @@ function loadStoredSettings() {
     function showModal(titleText, text, downloadFileName, metadata = {}) {
         closeModal();
 
+        const theme = getTheme();
+
         const overlay = document.createElement("div");
         overlay.id = ids.modal;
         overlay.style.position = "fixed";
         overlay.style.inset = "0";
         overlay.style.zIndex = "2147483647";
-        overlay.style.background = "rgba(9, 30, 66, 0.54)";
+        overlay.style.background = theme.overlay;
         overlay.style.display = "flex";
         overlay.style.alignItems = "center";
         overlay.style.justifyContent = "center";
@@ -1594,7 +1658,7 @@ function loadStoredSettings() {
         const panel = document.createElement("div");
         panel.style.width = "min(1200px, calc(100vw - 48px))";
         panel.style.height = "min(800px, calc(100vh - 48px))";
-        panel.style.background = "#ffffff";
+        panel.style.background = theme.panelBg;
         panel.style.borderRadius = "8px";
         panel.style.boxShadow = "0 12px 32px rgba(9, 30, 66, 0.31)";
         panel.style.display = "flex";
@@ -1607,7 +1671,7 @@ function loadStoredSettings() {
         header.style.justifyContent = "space-between";
         header.style.gap = "8px";
         header.style.padding = "10px 12px";
-        header.style.borderBottom = "1px solid #dfe1e6";
+        header.style.borderBottom = "1px solid " + theme.border;
 
         const titleArea = document.createElement("div");
         titleArea.style.display = "flex";
@@ -1626,7 +1690,7 @@ function loadStoredSettings() {
         title.textContent = titleText;
         title.style.fontSize = "14px";
         title.style.fontWeight = "700";
-        title.style.color = "#172b4d";
+        title.style.color = theme.text;
         title.style.overflow = "hidden";
         title.style.textOverflow = "ellipsis";
         title.style.whiteSpace = "nowrap";
@@ -1666,7 +1730,7 @@ function loadStoredSettings() {
             const metaLine = document.createElement("div");
             metaLine.textContent = metaParts.join(" · ");
             metaLine.style.fontSize = "12px";
-            metaLine.style.color = "#5e6c84";
+            metaLine.style.color = theme.muted;
             titleArea.appendChild(metaLine);
         }
 
@@ -1691,8 +1755,8 @@ function loadStoredSettings() {
         toolbar.style.alignItems = "center";
         toolbar.style.gap = "8px";
         toolbar.style.padding = "8px 12px";
-        toolbar.style.borderBottom = "1px solid #dfe1e6";
-        toolbar.style.background = "#fafbfc";
+        toolbar.style.borderBottom = "1px solid " + theme.border;
+        toolbar.style.background = theme.toolbarBg;
 
         const filterInput = document.createElement("input");
         filterInput.type = "search";
@@ -1700,9 +1764,11 @@ function loadStoredSettings() {
         filterInput.style.flex = "1";
         filterInput.style.height = "28px";
         filterInput.style.padding = "0 8px";
-        filterInput.style.border = "1px solid #dfe1e6";
+        filterInput.style.border = "1px solid " + theme.border;
         filterInput.style.borderRadius = "4px";
         filterInput.style.fontSize = "12px";
+        filterInput.style.background = theme.inputBg;
+        filterInput.style.color = theme.text;
 
         const textarea = document.createElement("textarea");
         textarea.value = text;
@@ -1718,7 +1784,8 @@ function loadStoredSettings() {
         textarea.style.fontSize = "12px";
         textarea.style.lineHeight = "1.45";
         textarea.style.whiteSpace = "pre";
-        textarea.style.color = "#172b4d";
+        textarea.style.color = theme.text;
+        textarea.style.background = theme.panelBg;
 
         const getFilteredText = () => filterDiffByFilename(text, filterInput.value);
 
@@ -1791,8 +1858,9 @@ function loadStoredSettings() {
             document.body.appendChild(toast);
         }
 
+        const theme = getTheme();
         const colors = {
-            info: { bg: "#172b4d", color: "#ffffff" },
+            info: { bg: theme.toastBg, color: theme.toastColor },
             warning: { bg: "#ff991f", color: "#172b4d" },
             error: { bg: "#de350b", color: "#ffffff" }
         };
@@ -1889,6 +1957,64 @@ function loadStoredSettings() {
 
     function setNotificationsEnabled(enabled) {
         setStoredJson(commentFilter.storageKeyNotifications, Boolean(enabled));
+    }
+
+    const SETTINGS_KEYS = [
+        commentFilter.storageKeyAuthors,
+        commentFilter.storageKeyEnabled,
+        commentFilter.storageKeyResolved,
+        commentFilter.storageKeyNotifications,
+        SETTINGS_LOCAL_REPO_ROOT
+    ];
+
+    function getLocalRepoRoot() {
+        return getStoredJson(SETTINGS_LOCAL_REPO_ROOT, "") || "";
+    }
+
+    function setLocalRepoRoot(root) {
+        setStoredJson(SETTINGS_LOCAL_REPO_ROOT, root);
+    }
+
+    function exportSettings() {
+        const data = {};
+
+        for (const key of SETTINGS_KEYS) {
+            data[key] = getStoredJson(key, null);
+        }
+
+        return JSON.stringify(data, null, 2);
+    }
+
+    function importSettings(json) {
+        let parsed;
+
+        try {
+            parsed = JSON.parse(json);
+        } catch {
+            throw new Error("Invalid JSON.");
+        }
+
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw new Error("Settings must be a JSON object.");
+        }
+
+        for (const key of SETTINGS_KEYS) {
+            if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+                setStoredJson(key, parsed[key]);
+            }
+        }
+    }
+
+    function openFileInVsCode(filePath) {
+        const root = getLocalRepoRoot().replace(/\/+$/, "");
+
+        if (!root) {
+            showToast("Set your local repository path in the comment filter settings first.", "warning");
+            return;
+        }
+
+        const uri = "vscode://file/" + root + "/" + String(filePath || "").replace(/^\/+/, "");
+        globalThis.location.href = uri;
     }
 
     function getCommentAuthor(commentElement) {
@@ -2059,19 +2185,21 @@ function loadStoredSettings() {
     function openCommentFilterSettings() {
         closeModal();
 
+        const theme = getTheme();
+
         const overlay = document.createElement("div");
         overlay.id = ids.settingsModal;
         overlay.style.position = "fixed";
         overlay.style.inset = "0";
         overlay.style.zIndex = "2147483647";
-        overlay.style.background = "rgba(9, 30, 66, 0.54)";
+        overlay.style.background = theme.overlay;
         overlay.style.display = "flex";
         overlay.style.alignItems = "center";
         overlay.style.justifyContent = "center";
 
         const panel = document.createElement("div");
         panel.style.width = "min(520px, calc(100vw - 32px))";
-        panel.style.background = "#ffffff";
+        panel.style.background = theme.panelBg;
         panel.style.borderRadius = "8px";
         panel.style.boxShadow = "0 12px 32px rgba(9, 30, 66, 0.31)";
         panel.style.display = "flex";
@@ -2083,13 +2211,13 @@ function loadStoredSettings() {
         header.style.alignItems = "center";
         header.style.justifyContent = "space-between";
         header.style.padding = "12px 16px";
-        header.style.borderBottom = "1px solid #dfe1e6";
+        header.style.borderBottom = "1px solid " + theme.border;
 
         const title = document.createElement("div");
         title.textContent = "Comment filter settings";
         title.style.fontSize = "14px";
         title.style.fontWeight = "700";
-        title.style.color = "#172b4d";
+        title.style.color = theme.text;
 
         header.appendChild(title);
 
@@ -2135,7 +2263,7 @@ function loadStoredSettings() {
             const label = document.createElement("span");
             label.textContent = labelText;
             label.style.fontSize = "13px";
-            label.style.color = "#172b4d";
+            label.style.color = theme.text;
 
             textColumn.appendChild(label);
 
@@ -2143,7 +2271,7 @@ function loadStoredSettings() {
                 const desc = document.createElement("span");
                 desc.textContent = description;
                 desc.style.fontSize = "12px";
-                desc.style.color = "#5e6c84";
+                desc.style.color = theme.muted;
                 textColumn.appendChild(desc);
             }
 
@@ -2196,13 +2324,13 @@ function loadStoredSettings() {
         listLabel.textContent = "Blocked authors";
         listLabel.style.fontSize = "12px";
         listLabel.style.fontWeight = "700";
-        listLabel.style.color = "#5e6c84";
+        listLabel.style.color = theme.muted;
         listLabel.style.textTransform = "uppercase";
 
         const listHint = document.createElement("div");
         listHint.textContent = "Case-insensitive patterns. Use * for any characters and ? for a single character (e.g. *bot*).";
         listHint.style.fontSize = "12px";
-        listHint.style.color = "#5e6c84";
+        listHint.style.color = theme.muted;
 
         const list = document.createElement("div");
         list.style.display = "flex";
@@ -2219,7 +2347,7 @@ function loadStoredSettings() {
                 const empty = document.createElement("div");
                 empty.textContent = "No authors blocked yet.";
                 empty.style.fontSize = "12px";
-                empty.style.color = "#5e6c84";
+                empty.style.color = theme.muted;
                 list.appendChild(empty);
                 return;
             }
@@ -2231,13 +2359,13 @@ function loadStoredSettings() {
                 row.style.justifyContent = "space-between";
                 row.style.gap = "8px";
                 row.style.padding = "6px 8px";
-                row.style.background = "#f4f5f7";
+                row.style.background = theme.rowBg;
                 row.style.borderRadius = "4px";
 
                 const name = document.createElement("span");
                 name.textContent = author;
                 name.style.fontSize = "13px";
-                name.style.color = "#172b4d";
+                name.style.color = theme.text;
 
                 const removeButton = document.createElement("button");
                 removeButton.type = "button";
@@ -2271,9 +2399,11 @@ function loadStoredSettings() {
         input.style.flex = "1";
         input.style.height = "30px";
         input.style.padding = "0 8px";
-        input.style.border = "1px solid #dfe1e6";
+        input.style.border = "1px solid " + theme.border;
         input.style.borderRadius = "4px";
         input.style.fontSize = "13px";
+        input.style.background = theme.inputBg;
+        input.style.color = theme.text;
 
         const addButton = createButton("Add", () => {
             const value = input.value.trim();
@@ -2303,6 +2433,77 @@ function loadStoredSettings() {
             }
         });
 
+        const repoRootLabel = document.createElement("div");
+        repoRootLabel.textContent = "Local repository path";
+        repoRootLabel.style.fontSize = "12px";
+        repoRootLabel.style.fontWeight = "700";
+        repoRootLabel.style.color = theme.muted;
+        repoRootLabel.style.textTransform = "uppercase";
+
+        const repoRootInput = document.createElement("input");
+        repoRootInput.type = "text";
+        repoRootInput.placeholder = "/absolute/path/to/your/local/repo";
+        repoRootInput.value = getLocalRepoRoot();
+        repoRootInput.style.width = "100%";
+        repoRootInput.style.height = "30px";
+        repoRootInput.style.padding = "0 8px";
+        repoRootInput.style.border = "1px solid " + theme.border;
+        repoRootInput.style.borderRadius = "4px";
+        repoRootInput.style.fontSize = "13px";
+        repoRootInput.style.background = theme.inputBg;
+        repoRootInput.style.color = theme.text;
+
+        repoRootInput.addEventListener("change", () => {
+            setLocalRepoRoot(repoRootInput.value.trim());
+        });
+
+        const dataRow = document.createElement("div");
+        dataRow.style.display = "flex";
+        dataRow.style.gap = "8px";
+        dataRow.style.alignItems = "flex-start";
+
+        dataRow.appendChild(createButton("Export settings", () => {
+            copyToClipboard(exportSettings());
+            showToast("Settings copied to clipboard.", "info");
+        }, { compact: true, title: "Copy all settings as JSON" }));
+
+        const importArea = document.createElement("textarea");
+        importArea.placeholder = "Paste exported settings JSON here…";
+        importArea.style.width = "100%";
+        importArea.style.height = "70px";
+        importArea.style.display = "none";
+        importArea.style.padding = "8px";
+        importArea.style.border = "1px solid " + theme.border;
+        importArea.style.borderRadius = "4px";
+        importArea.style.fontSize = "12px";
+        importArea.style.background = theme.inputBg;
+        importArea.style.color = theme.text;
+        importArea.style.resize = "vertical";
+
+        const importApplyButton = createButton("Apply import", () => {
+            try {
+                importSettings(importArea.value);
+                showToast("Settings imported.", "info");
+                openCommentFilterSettings();
+            } catch (error) {
+                showError(error);
+            }
+        }, { compact: true });
+
+        importApplyButton.style.display = "none";
+
+        dataRow.appendChild(createButton("Import settings", () => {
+            const show = importArea.style.display === "none";
+            importArea.style.display = show ? "block" : "none";
+            importApplyButton.style.display = show ? "inline-flex" : "none";
+
+            if (show) {
+                importArea.focus();
+            }
+        }, { compact: true, title: "Import settings from JSON" }));
+
+        dataRow.appendChild(importApplyButton);
+
         body.appendChild(authorToggleRow);
         body.appendChild(resolvedToggleRow);
         body.appendChild(notificationsToggleRow);
@@ -2310,6 +2511,10 @@ function loadStoredSettings() {
         body.appendChild(listHint);
         body.appendChild(list);
         body.appendChild(addRow);
+        body.appendChild(repoRootLabel);
+        body.appendChild(repoRootInput);
+        body.appendChild(dataRow);
+        body.appendChild(importArea);
 
         panel.appendChild(header);
         panel.appendChild(body);
@@ -2396,6 +2601,172 @@ function loadStoredSettings() {
         return null;
     }
 
+    async function getPullRequestSummary() {
+        const pageInfo = parsePullRequestUrl();
+
+        if (!pageInfo || pageInfo.type !== "pullrequest") {
+            throw new Error("This action works on a pull request page.");
+        }
+
+        const metadata = await fetchPullRequestMetadata(pageInfo);
+        const diffstat = await fetchPullRequestDiffstat(pageInfo);
+        const title = metadata.title || "";
+        const author = (metadata.author && (metadata.author.display_name || metadata.author.nickname)) || "";
+        const sourceBranch = (metadata.source && metadata.source.branch && metadata.source.branch.name) || "";
+        const destinationBranch = (metadata.destination && metadata.destination.branch && metadata.destination.branch.name) || "";
+        const ticket = BbDiffEnhancer.extractJiraTicket(title + " " + sourceBranch);
+        const added = diffstat.reduce((sum, entry) => sum + (entry.lines_added || 0), 0);
+        const removed = diffstat.reduce((sum, entry) => sum + (entry.lines_removed || 0), 0);
+
+        return BbDiffEnhancer.buildPullRequestSummary({
+            title,
+            url: globalThis.location.href,
+            author,
+            ticket,
+            sourceBranch,
+            destinationBranch,
+            files: diffstat.length,
+            added,
+            removed
+        });
+    }
+
+    async function getAiReviewPrompt() {
+        const pageInfo = parsePullRequestUrl();
+        const result = await extractFullDiff();
+        let title = "";
+        let sourceBranch = "";
+        let destinationBranch = "";
+
+        if (pageInfo && pageInfo.type === "pullrequest") {
+            try {
+                const metadata = await fetchPullRequestMetadata(pageInfo);
+                title = metadata.title || "";
+                sourceBranch = (metadata.source && metadata.source.branch && metadata.source.branch.name) || "";
+                destinationBranch = (metadata.destination && metadata.destination.branch && metadata.destination.branch.name) || "";
+            } catch {
+                // metadata is optional for the prompt
+            }
+        }
+
+        return BbDiffEnhancer.buildAiReviewPrompt({
+            title,
+            sourceBranch,
+            destinationBranch,
+            diff: result.text
+        });
+    }
+
+    async function getReviewTemplate(type) {
+        const pageInfo = parsePullRequestUrl();
+        let title = "";
+
+        if (pageInfo && pageInfo.type === "pullrequest") {
+            try {
+                const metadata = await fetchPullRequestMetadata(pageInfo);
+                title = metadata.title || "";
+            } catch {
+                // title is optional for the template
+            }
+        }
+
+        return BbDiffEnhancer.buildReviewTemplate({
+            type,
+            title,
+            url: globalThis.location.href
+        });
+    }
+
+    const openMenus = [];
+
+    function closeAllMenus() {
+        while (openMenus.length > 0) {
+            openMenus.pop().style.display = "none";
+        }
+    }
+
+    document.addEventListener("click", (event) => {
+        if (openMenus.length > 0 && !event.target.closest(".bbde-menu")) {
+            closeAllMenus();
+        }
+    }, true);
+
+    function createMenuButton(label, items) {
+        const theme = getTheme();
+
+        const container = document.createElement("div");
+        container.className = "bbde-menu";
+        container.style.position = "relative";
+        container.style.display = "inline-flex";
+
+        const menu = document.createElement("div");
+        menu.style.display = "none";
+        menu.style.position = "absolute";
+        menu.style.top = "calc(100% + 4px)";
+        menu.style.right = "0";
+        menu.style.minWidth = "240px";
+        menu.style.background = theme.panelBg;
+        menu.style.border = "1px solid " + theme.border;
+        menu.style.borderRadius = "6px";
+        menu.style.boxShadow = "0 8px 16px rgba(9, 30, 66, 0.25)";
+        menu.style.zIndex = "2147483647";
+        menu.style.padding = "4px";
+        menu.style.overflow = "hidden";
+
+        const button = createButton(label, () => {
+            const isOpen = menu.style.display !== "none";
+            closeAllMenus();
+
+            if (!isOpen) {
+                menu.style.display = "block";
+                openMenus.push(menu);
+            }
+        }, { compact: true, title: "More actions" });
+
+        for (const item of items) {
+            const itemButton = document.createElement("button");
+            itemButton.type = "button";
+            itemButton.textContent = item.label;
+            itemButton.style.display = "block";
+            itemButton.style.width = "100%";
+            itemButton.style.textAlign = "left";
+            itemButton.style.padding = "8px 12px";
+            itemButton.style.background = "transparent";
+            itemButton.style.border = "0";
+            itemButton.style.cursor = "pointer";
+            itemButton.style.fontSize = "13px";
+            itemButton.style.fontFamily = "Arial, sans-serif";
+            itemButton.style.color = theme.text;
+            itemButton.style.borderRadius = "4px";
+
+            itemButton.addEventListener("click", (event) => {
+                stopHeaderToggle(event);
+                closeAllMenus();
+
+                try {
+                    item.onClick(event);
+                } catch (error) {
+                    showError(error);
+                }
+            });
+
+            itemButton.addEventListener("mouseenter", () => {
+                itemButton.style.background = theme.rowBg;
+            });
+
+            itemButton.addEventListener("mouseleave", () => {
+                itemButton.style.background = "transparent";
+            });
+
+            menu.appendChild(itemButton);
+        }
+
+        container.appendChild(button);
+        container.appendChild(menu);
+
+        return container;
+    }
+
     function addPageToolbar() {
         if (!document.querySelector(selectors.file) && !parsePullRequestUrl()) {
             return;
@@ -2471,6 +2842,40 @@ function loadStoredSettings() {
                 title: "Configure which authors' comments to hide"
             }));
 
+            group.appendChild(createMenuButton("More", [
+                {
+                    label: "Copy PR summary",
+                    onClick: async () => {
+                        const summary = await getPullRequestSummary();
+                        await copyToClipboard(summary);
+                        showToast("PR summary copied to clipboard.");
+                    }
+                },
+                {
+                    label: "Copy for AI review",
+                    onClick: async () => {
+                        showToast("Generating AI review prompt…", "info");
+                        const prompt = await getAiReviewPrompt();
+                        await copyToClipboard(prompt);
+                        showToast("AI review prompt copied to clipboard.");
+                    }
+                },
+                {
+                    label: "Copy approval template",
+                    onClick: async () => {
+                        await copyToClipboard(await getReviewTemplate("approve"));
+                        showToast("Approval template copied.");
+                    }
+                },
+                {
+                    label: "Copy changes-requested template",
+                    onClick: async () => {
+                        await copyToClipboard(await getReviewTemplate("changes"));
+                        showToast("Changes-requested template copied.");
+                    }
+                }
+            ]));
+
             wrapper.appendChild(group);
             insertionPoint.parentElement.insertBefore(wrapper, insertionPoint);
         }
@@ -2533,6 +2938,12 @@ function loadStoredSettings() {
         group.appendChild(createIconButton(GEAR_ICON_SVG, "Comment filter settings", () => {
             openCommentFilterSettings();
         }));
+
+        if (getLocalRepoRoot()) {
+            group.appendChild(createIconButton(CODE_ICON_SVG, "Open in VS Code", () => {
+                openFileInVsCode(filePath);
+            }));
+        }
 
         actionsElement.insertBefore(group, actionsElement.firstChild);
         fileElement.setAttribute(attributes.fileButtonsAdded, "true");

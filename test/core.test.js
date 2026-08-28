@@ -106,3 +106,51 @@ test("safeFileName sanitizes paths", () => {
     const long = "x".repeat(300);
     assert.equal(core.safeFileName(long).length, 180);
 });
+
+test("extractJiraTicket finds a ticket id", () => {
+    assert.equal(core.extractJiraTicket("RU-27680 do the thing"), "RU-27680");
+    assert.equal(core.extractJiraTicket("fix bug (ABC-123)"), "ABC-123");
+    assert.equal(core.extractJiraTicket("no ticket here"), "");
+    assert.equal(core.extractJiraTicket(""), "");
+});
+
+test("buildPullRequestSummary formats fields", () => {
+    const summary = core.buildPullRequestSummary({
+        title: "Add S3 access",
+        url: "https://bitbucket.org/ws/repo/pull-requests/1",
+        author: "Ameer Jamal",
+        ticket: "RU-27680",
+        sourceBranch: "feature/x",
+        destinationBranch: "main",
+        files: 3,
+        added: 10,
+        removed: 2
+    });
+
+    assert.match(summary, /Title: Add S3 access/);
+    assert.match(summary, /Ticket: RU-27680/);
+    assert.match(summary, /Branch: feature\/x -> main/);
+    assert.match(summary, /Files changed: 3/);
+    assert.match(summary, /Lines: \+10 \/ -2/);
+});
+
+test("buildAiReviewPrompt embeds the diff", () => {
+    const prompt = core.buildAiReviewPrompt({
+        title: "Fix bug",
+        sourceBranch: "feature",
+        destinationBranch: "main",
+        diff: "-old\n+new"
+    });
+
+    assert.match(prompt, /Title: Fix bug/);
+    assert.match(prompt, /```diff/);
+    assert.match(prompt, /-old\n\+new/);
+});
+
+test("buildReviewTemplate supports approval and changes", () => {
+    const approve = core.buildReviewTemplate({ type: "approve", title: "My PR" });
+    assert.match(approve, /Approved: My PR/);
+
+    const changes = core.buildReviewTemplate({ type: "changes", title: "My PR" });
+    assert.match(changes, /Requesting changes: My PR/);
+});
