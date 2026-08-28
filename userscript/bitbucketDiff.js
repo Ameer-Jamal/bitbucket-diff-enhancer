@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bitbucket Readable Diff Extractor
 // @namespace    https://bitbucket.org/
-// @version      1.7.1
+// @version      1.8.0
 // @description  Extract Bitbucket Cloud PR diffs as readable unified-diff text, with per-file buttons, API full-diff support, and the ability to hide PR comments from configured authors (e.g. bots).
 // @match        https://bitbucket.org/*
 // @connect      api.bitbucket.org
@@ -1913,6 +1913,33 @@
         return container;
     }
 
+    function matchesGlob(pattern, text) {
+        const source = String(pattern)
+            .split("")
+            .map((character) => {
+                if (character === "*") {
+                    return ".*";
+                }
+
+                if (character === "?") {
+                    return ".";
+                }
+
+                return character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            })
+            .join("");
+
+        return new RegExp("^" + source + "$", "i").test(String(text || ""));
+    }
+
+    function isAuthorBlocked(author, patterns) {
+        if (!author || !Array.isArray(patterns) || patterns.length === 0) {
+            return false;
+        }
+
+        return patterns.some((pattern) => matchesGlob(pattern, author));
+    }
+
     function hideBlockedComments() {
         if (!isCommentFilterEnabled()) {
             return 0;
@@ -1924,7 +1951,6 @@
             return 0;
         }
 
-        const blockedSet = new Set(blocked.map((name) => name.toLowerCase()));
         let hiddenCount = 0;
 
         for (const commentElement of document.querySelectorAll('[data-testid="comment"]')) {
@@ -1936,7 +1962,7 @@
 
             const author = getCommentAuthor(commentElement);
 
-            if (!author || !blockedSet.has(author.toLowerCase())) {
+            if (!isAuthorBlocked(author, blocked)) {
                 continue;
             }
 
@@ -2174,7 +2200,7 @@
 
         const input = document.createElement("input");
         input.type = "text";
-        input.placeholder = "Author username (e.g. DSO-PR-Bot)";
+        input.placeholder = "Author pattern (e.g. DSO-PR-Bot or *bot*)";
         input.style.flex = "1";
         input.style.height = "30px";
         input.style.padding = "0 8px";

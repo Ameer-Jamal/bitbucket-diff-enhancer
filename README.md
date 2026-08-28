@@ -9,11 +9,13 @@ pull requests easier to review.
   text, per file or for the whole pull request (uses the Bitbucket API for full
   diffs, with a DOM fallback).
 - **Comment filter** — hide inline comments from authors you choose (e.g. bots
-  like `DSO-PR-Bot`).
+  like `DSO-PR-Bot`). Patterns support `*`/`?` wildcards (e.g. `*bot*`), and are
+  case-insensitive.
 - **Hide resolved comments** — collapse away resolved comment threads so only
   open feedback remains.
 - **Settings UI** — a gear icon next to each file's diff buttons, or the
-  **Comment filter** button in the PR header.
+  **Comment filter** button in the PR header. Includes per-feature toggles,
+  notification preferences, and a reset-to-defaults action.
 
 ## Install
 
@@ -35,11 +37,25 @@ userscript manager.
 ├── manifest.json               # Chrome MV3 manifest
 ├── background.js               # Service worker: cross-origin fetches
 ├── content.js                  # Content script: diff extraction + comment filtering
+├── lib/
+│   └── core.js                 # Shared pure logic (glob matching, diff helpers)
+├── test/
+│   └── core.test.js            # Unit tests (Node's built-in test runner)
 ├── icons/                      # Extension icons
 ├── userscript/
 │   └── bitbucketDiff.js        # Tampermonkey version of the same tool
+├── package.json                # `npm test` script
 └── README.md
 ```
+
+## Testing
+
+```sh
+npm test
+```
+
+Runs the unit tests for the shared pure logic (`lib/core.js`) — glob matching,
+author blocking, and diff text helpers — using Node's built-in test runner.
 
 ## How it works
 

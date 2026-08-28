@@ -168,9 +168,7 @@ function loadStoredSettings() {
         code: ".code-diff"
     };
 
-    function normalizeWhitespace(value) {
-        return String(value || "").replace(/\u00a0/g, " ");
-    }
+    const normalizeWhitespace = BbDiffEnhancer.normalizeWhitespace;
 
     function getFilePath(fileElement) {
         const ariaLabel = fileElement.getAttribute("aria-label") || "";
@@ -1230,20 +1228,7 @@ function loadStoredSettings() {
         }
     }
 
-    function countDiffLines(text) {
-        let added = 0;
-        let removed = 0;
-
-        for (const line of text.split("\n")) {
-            if (line.startsWith("+") && !line.startsWith("+++")) {
-                added += 1;
-            } else if (line.startsWith("-") && !line.startsWith("---")) {
-                removed += 1;
-            }
-        }
-
-        return { added, removed };
-    }
+    const countDiffLines = BbDiffEnhancer.countDiffLines;
 
     function buildDiffResult(partial) {
         const lineCounts = countDiffLines(partial.text || "");
@@ -1450,22 +1435,7 @@ function loadStoredSettings() {
         return `Readable Bitbucket Diff (${result.fallbackReason})`;
     }
 
-    function filterDiffByFilename(fullText, filterQuery) {
-        const query = filterQuery.trim().toLowerCase();
-
-        if (!query) {
-            return fullText;
-        }
-
-        const blocks = fullText.split(/\n(?=diff --git )/);
-        const matched = blocks.filter((block) => {
-            const pathMatch = block.match(/^diff --git a\/(.+?) b\//m);
-
-            return pathMatch && pathMatch[1].toLowerCase().includes(query);
-        });
-
-        return matched.join("\n\n");
-    }
+    const filterDiffByFilename = BbDiffEnhancer.filterDiffByFilename;
 
     async function copyToClipboard(text) {
         if (typeof GM_setClipboard === "function") {
@@ -1490,12 +1460,7 @@ function loadStoredSettings() {
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    function safeFileName(filePath) {
-        return filePath
-            .replace(/[\\/:"*?<>|]+/g, "_")
-            .replace(/\s+/g, "_")
-            .slice(-180) || "bitbucket-file";
-    }
+    const safeFileName = BbDiffEnhancer.safeFileName;
 
     function stopHeaderToggle(event) {
         event.preventDefault();
@@ -1857,6 +1822,7 @@ function loadStoredSettings() {
         storageKeyAuthors: "bb-readable-diff-blocked-authors",
         storageKeyEnabled: "bb-readable-diff-hide-comments-enabled",
         storageKeyResolved: "bb-readable-diff-hide-resolved-enabled",
+        storageKeyNotifications: "bb-readable-diff-show-notifications",
         defaultAuthors: ["DSO-PR-Bot"],
         processedAttribute: "data-bb-comment-filtered",
         reasonAuthor: "author",
@@ -1915,6 +1881,14 @@ function loadStoredSettings() {
 
     function setHideResolvedEnabled(enabled) {
         setStoredJson(commentFilter.storageKeyResolved, Boolean(enabled));
+    }
+
+    function isNotificationsEnabled() {
+        return getStoredJson(commentFilter.storageKeyNotifications, true) !== false;
+    }
+
+    function setNotificationsEnabled(enabled) {
+        setStoredJson(commentFilter.storageKeyNotifications, Boolean(enabled));
     }
 
     function getCommentAuthor(commentElement) {
@@ -1993,7 +1967,6 @@ function loadStoredSettings() {
             return 0;
         }
 
-        const blockedSet = new Set(blocked.map((name) => name.toLowerCase()));
         let hiddenCount = 0;
 
         for (const commentElement of document.querySelectorAll('[data-testid="comment"]')) {
@@ -2005,7 +1978,7 @@ function loadStoredSettings() {
 
             const author = getCommentAuthor(commentElement);
 
-            if (!author || !blockedSet.has(author.toLowerCase())) {
+            if (!BbDiffEnhancer.isAuthorBlocked(author, blocked)) {
                 continue;
             }
 
@@ -2066,6 +2039,10 @@ function loadStoredSettings() {
     let lastCommentToastAt = 0;
 
     function notifyCommentsHidden(count) {
+        if (!isNotificationsEnabled()) {
+            return;
+        }
+
         const now = Date.now();
 
         if (now - lastCommentToastAt < 8000) {
@@ -2115,7 +2092,21 @@ function loadStoredSettings() {
         title.style.color = "#172b4d";
 
         header.appendChild(title);
-        header.appendChild(createButton("Close", closeModal));
+
+        const headerActions = document.createElement("div");
+        headerActions.style.display = "flex";
+        headerActions.style.gap = "8px";
+
+        headerActions.appendChild(createButton("Reset to defaults", () => {
+            setBlockedAuthors(commentFilter.defaultAuthors.slice());
+            setCommentFilterEnabled(true);
+            setHideResolvedEnabled(false);
+            setNotificationsEnabled(true);
+            openCommentFilterSettings();
+        }));
+
+        headerActions.appendChild(createButton("Close", closeModal));
+        header.appendChild(headerActions);
 
         const body = document.createElement("div");
         body.style.padding = "16px";
@@ -2123,24 +2114,41 @@ function loadStoredSettings() {
         body.style.flexDirection = "column";
         body.style.gap = "14px";
 
-        const createToggleRow = (labelText, initialValue, onChange) => {
+        const createToggleRow = (labelText, description, initialValue, onChange) => {
             const row = document.createElement("label");
             row.style.display = "flex";
-            row.style.alignItems = "center";
+            row.style.alignItems = "flex-start";
             row.style.gap = "8px";
             row.style.cursor = "pointer";
-            row.style.fontSize = "13px";
-            row.style.color = "#172b4d";
 
             const checkbox = document.createElement("input");
             checkbox.type = "checkbox";
             checkbox.checked = initialValue;
+            checkbox.style.marginTop = "1px";
+            checkbox.style.flexShrink = "0";
+
+            const textColumn = document.createElement("div");
+            textColumn.style.display = "flex";
+            textColumn.style.flexDirection = "column";
+            textColumn.style.gap = "2px";
 
             const label = document.createElement("span");
             label.textContent = labelText;
+            label.style.fontSize = "13px";
+            label.style.color = "#172b4d";
+
+            textColumn.appendChild(label);
+
+            if (description) {
+                const desc = document.createElement("span");
+                desc.textContent = description;
+                desc.style.fontSize = "12px";
+                desc.style.color = "#5e6c84";
+                textColumn.appendChild(desc);
+            }
 
             row.appendChild(checkbox);
-            row.appendChild(label);
+            row.appendChild(textColumn);
 
             checkbox.addEventListener("change", () => {
                 onChange(checkbox.checked);
@@ -2151,6 +2159,7 @@ function loadStoredSettings() {
 
         const authorToggleRow = createToggleRow(
             "Hide comments from blocked authors",
+            "Hides inline comments from the blocked author patterns below.",
             isCommentFilterEnabled(),
             (checked) => {
                 setCommentFilterEnabled(checked);
@@ -2163,6 +2172,7 @@ function loadStoredSettings() {
 
         const resolvedToggleRow = createToggleRow(
             "Hide resolved comments",
+            "Removes resolved comment threads from the diff view.",
             isHideResolvedEnabled(),
             (checked) => {
                 setHideResolvedEnabled(checked);
@@ -2173,12 +2183,26 @@ function loadStoredSettings() {
             }
         );
 
+        const notificationsToggleRow = createToggleRow(
+            "Show hidden-comment notifications",
+            "Displays a toast when comment threads are hidden.",
+            isNotificationsEnabled(),
+            (checked) => {
+                setNotificationsEnabled(checked);
+            }
+        );
+
         const listLabel = document.createElement("div");
         listLabel.textContent = "Blocked authors";
         listLabel.style.fontSize = "12px";
         listLabel.style.fontWeight = "700";
         listLabel.style.color = "#5e6c84";
         listLabel.style.textTransform = "uppercase";
+
+        const listHint = document.createElement("div");
+        listHint.textContent = "Case-insensitive patterns. Use * for any characters and ? for a single character (e.g. *bot*).";
+        listHint.style.fontSize = "12px";
+        listHint.style.color = "#5e6c84";
 
         const list = document.createElement("div");
         list.style.display = "flex";
@@ -2243,7 +2267,7 @@ function loadStoredSettings() {
 
         const input = document.createElement("input");
         input.type = "text";
-        input.placeholder = "Author username (e.g. DSO-PR-Bot)";
+        input.placeholder = "Author pattern (e.g. DSO-PR-Bot or *bot*)";
         input.style.flex = "1";
         input.style.height = "30px";
         input.style.padding = "0 8px";
@@ -2281,7 +2305,9 @@ function loadStoredSettings() {
 
         body.appendChild(authorToggleRow);
         body.appendChild(resolvedToggleRow);
+        body.appendChild(notificationsToggleRow);
         body.appendChild(listLabel);
+        body.appendChild(listHint);
         body.appendChild(list);
         body.appendChild(addRow);
 
