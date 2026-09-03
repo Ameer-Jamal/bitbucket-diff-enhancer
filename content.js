@@ -2136,8 +2136,8 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         }
     }
 
-    function getCommentAuthor(commentElement) {
-        const triggers = commentElement.querySelectorAll('[data-testid="profileCardTrigger"]');
+    function getAuthorFromElement(element) {
+        const triggers = element.querySelectorAll('[data-testid="profileCardTrigger"]');
 
         for (const trigger of triggers) {
             const ariaLabel = trigger.getAttribute("aria-label") || "";
@@ -2148,7 +2148,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             }
         }
 
-        const header = commentElement.querySelector('[data-testid="comment-header"]');
+        const header = element.querySelector('[data-testid="comment-header"]');
 
         if (header) {
             const name = normalizeWhitespace(header.textContent)
@@ -2215,13 +2215,19 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         let hiddenCount = 0;
 
         for (const commentElement of document.querySelectorAll('[data-testid="comment"]')) {
+            // Comments on the Overview page live inside a `pull-request-activity`
+            // entry, which is removed wholesale by hideBlockedActivity().
+            if (commentElement.closest('[data-qa="pull-request-activity"]')) {
+                continue;
+            }
+
             const container = findCommentThreadContainer(commentElement);
 
             if (!container || container.hasAttribute(commentFilter.processedAttribute)) {
                 continue;
             }
 
-            const author = getCommentAuthor(commentElement);
+            const author = getAuthorFromElement(commentElement);
 
             if (!BbDiffEnhancer.isAuthorBlocked(author, blocked)) {
                 continue;
@@ -2230,6 +2236,39 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             container.setAttribute(commentFilter.processedAttribute, commentFilter.reasonAuthor);
             container.setAttribute("aria-hidden", "true");
             container.style.display = "none";
+            hiddenCount += 1;
+        }
+
+        return hiddenCount;
+    }
+
+    function hideBlockedActivity() {
+        if (!isCommentFilterEnabled()) {
+            return 0;
+        }
+
+        const blocked = getBlockedAuthors();
+
+        if (blocked.length === 0) {
+            return 0;
+        }
+
+        let hiddenCount = 0;
+
+        for (const activityElement of document.querySelectorAll('[data-qa="pull-request-activity"]')) {
+            if (activityElement.hasAttribute(commentFilter.processedAttribute)) {
+                continue;
+            }
+
+            const author = getAuthorFromElement(activityElement);
+
+            if (!BbDiffEnhancer.isAuthorBlocked(author, blocked)) {
+                continue;
+            }
+
+            activityElement.setAttribute(commentFilter.processedAttribute, commentFilter.reasonAuthor);
+            activityElement.setAttribute("aria-hidden", "true");
+            activityElement.style.display = "none";
             hiddenCount += 1;
         }
 
@@ -3199,8 +3238,9 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
         const runCommentFilter = () => {
             const authorHidden = hideBlockedComments();
+            const activityHidden = hideBlockedActivity();
             const resolvedHidden = hideResolvedComments();
-            const hiddenCount = authorHidden + resolvedHidden;
+            const hiddenCount = authorHidden + activityHidden + resolvedHidden;
 
             if (hiddenCount > 0) {
                 notifyCommentsHidden(hiddenCount);
