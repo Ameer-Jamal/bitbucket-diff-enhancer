@@ -2276,7 +2276,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
     }
 
     function isResolvedThread(container) {
-        return normalizeWhitespace(container.textContent).includes("resolved this comment thread");
+        return /resolved this (?:comment )?thread/i.test(normalizeWhitespace(container.textContent));
     }
 
     function hideResolvedComments() {
@@ -2287,6 +2287,11 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         let hiddenCount = 0;
 
         for (const commentElement of document.querySelectorAll('[data-testid="comment"]')) {
+            // Resolved threads on the Overview page are handled by hideResolvedActivity().
+            if (commentElement.closest('[data-qa="pull-request-activity"]')) {
+                continue;
+            }
+
             const container = findCommentThreadContainer(commentElement);
 
             if (!container || container.hasAttribute(commentFilter.processedAttribute)) {
@@ -2300,6 +2305,31 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             container.setAttribute(commentFilter.processedAttribute, commentFilter.reasonResolved);
             container.setAttribute("aria-hidden", "true");
             container.style.display = "none";
+            hiddenCount += 1;
+        }
+
+        return hiddenCount;
+    }
+
+    function hideResolvedActivity() {
+        if (!isHideResolvedEnabled()) {
+            return 0;
+        }
+
+        let hiddenCount = 0;
+
+        for (const activityElement of document.querySelectorAll('[data-qa="pull-request-activity"]')) {
+            if (activityElement.hasAttribute(commentFilter.processedAttribute)) {
+                continue;
+            }
+
+            if (!isResolvedThread(activityElement)) {
+                continue;
+            }
+
+            activityElement.setAttribute(commentFilter.processedAttribute, commentFilter.reasonResolved);
+            activityElement.setAttribute("aria-hidden", "true");
+            activityElement.style.display = "none";
             hiddenCount += 1;
         }
 
@@ -3240,7 +3270,8 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             const authorHidden = hideBlockedComments();
             const activityHidden = hideBlockedActivity();
             const resolvedHidden = hideResolvedComments();
-            const hiddenCount = authorHidden + activityHidden + resolvedHidden;
+            const resolvedActivityHidden = hideResolvedActivity();
+            const hiddenCount = authorHidden + activityHidden + resolvedHidden + resolvedActivityHidden;
 
             if (hiddenCount > 0) {
                 notifyCommentsHidden(hiddenCount);
@@ -3260,6 +3291,11 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             childList: true,
             subtree: true
         });
+
+        // Safety net: Bitbucket lazy-loads activity/diff content as you scroll,
+        // and some mutations may slip past the debounced observer. Re-check on a
+        // fixed interval so newly loaded content is always filtered.
+        globalThis.setInterval(runCommentFilter, 1000);
     }
 
     function init() {
