@@ -4,6 +4,7 @@ const DEFAULTS = {
     "bb-readable-diff-blocked-authors": ["DSO-PR-Bot"],
     "bb-readable-diff-hide-comments-enabled": true,
     "bb-readable-diff-hide-resolved-enabled": false,
+    "bb-readable-diff-hide-outdated-enabled": false,
     "bb-readable-diff-show-notifications": true,
     "bb-readable-diff-local-repo-root": "",
     "bb-readable-diff-theme": "auto",
@@ -174,6 +175,7 @@ async function loadForm() {
 
     document.getElementById("hide-comments").checked = settings["bb-readable-diff-hide-comments-enabled"];
     document.getElementById("hide-resolved").checked = settings["bb-readable-diff-hide-resolved-enabled"];
+    document.getElementById("hide-outdated").checked = settings["bb-readable-diff-hide-outdated-enabled"];
     document.getElementById("show-notifications").checked = settings["bb-readable-diff-show-notifications"];
     document.getElementById("local-repo-root").value = settings["bb-readable-diff-local-repo-root"];
 
@@ -265,6 +267,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     bindToggle("hide-comments", "bb-readable-diff-hide-comments-enabled");
     bindToggle("hide-resolved", "bb-readable-diff-hide-resolved-enabled");
+    bindToggle("hide-outdated", "bb-readable-diff-hide-outdated-enabled");
     bindToggle("show-notifications", "bb-readable-diff-show-notifications");
 
     document.getElementById("local-repo-root").addEventListener("change", (event) => {

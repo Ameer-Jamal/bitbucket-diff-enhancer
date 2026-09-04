@@ -1953,11 +1953,13 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         storageKeyAuthors: "bb-readable-diff-blocked-authors",
         storageKeyEnabled: "bb-readable-diff-hide-comments-enabled",
         storageKeyResolved: "bb-readable-diff-hide-resolved-enabled",
+        storageKeyOutdated: "bb-readable-diff-hide-outdated-enabled",
         storageKeyNotifications: "bb-readable-diff-show-notifications",
         defaultAuthors: ["DSO-PR-Bot"],
         processedAttribute: "data-bb-comment-filtered",
         reasonAuthor: "author",
-        reasonResolved: "resolved"
+        reasonResolved: "resolved",
+        reasonOutdated: "outdated"
     };
 
     function getStoredJson(key, fallback) {
@@ -2014,6 +2016,14 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         setStoredJson(commentFilter.storageKeyResolved, Boolean(enabled));
     }
 
+    function isHideOutdatedEnabled() {
+        return getStoredJson(commentFilter.storageKeyOutdated, false) === true;
+    }
+
+    function setHideOutdatedEnabled(enabled) {
+        setStoredJson(commentFilter.storageKeyOutdated, Boolean(enabled));
+    }
+
     function isNotificationsEnabled() {
         return getStoredJson(commentFilter.storageKeyNotifications, true) !== false;
     }
@@ -2026,6 +2036,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         commentFilter.storageKeyAuthors,
         commentFilter.storageKeyEnabled,
         commentFilter.storageKeyResolved,
+        commentFilter.storageKeyOutdated,
         commentFilter.storageKeyNotifications,
         SETTINGS_LOCAL_REPO_ROOT,
         SETTINGS_THEME,
@@ -2336,6 +2347,72 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
         return hiddenCount;
     }
 
+    function isOutdated(element) {
+        for (const span of element.querySelectorAll("span")) {
+            if (normalizeWhitespace(span.textContent).trim() === "Outdated") {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function hideOutdatedComments() {
+        if (!isHideOutdatedEnabled()) {
+            return 0;
+        }
+
+        let hiddenCount = 0;
+
+        for (const commentElement of document.querySelectorAll('[data-testid="comment"]')) {
+            if (commentElement.closest('[data-qa="pull-request-activity"]')) {
+                continue;
+            }
+
+            const container = findCommentThreadContainer(commentElement);
+
+            if (!container || container.hasAttribute(commentFilter.processedAttribute)) {
+                continue;
+            }
+
+            if (!isOutdated(container)) {
+                continue;
+            }
+
+            container.setAttribute(commentFilter.processedAttribute, commentFilter.reasonOutdated);
+            container.setAttribute("aria-hidden", "true");
+            container.style.display = "none";
+            hiddenCount += 1;
+        }
+
+        return hiddenCount;
+    }
+
+    function hideOutdatedActivity() {
+        if (!isHideOutdatedEnabled()) {
+            return 0;
+        }
+
+        let hiddenCount = 0;
+
+        for (const activityElement of document.querySelectorAll('[data-qa="pull-request-activity"]')) {
+            if (activityElement.hasAttribute(commentFilter.processedAttribute)) {
+                continue;
+            }
+
+            if (!isOutdated(activityElement)) {
+                continue;
+            }
+
+            activityElement.setAttribute(commentFilter.processedAttribute, commentFilter.reasonOutdated);
+            activityElement.setAttribute("aria-hidden", "true");
+            activityElement.style.display = "none";
+            hiddenCount += 1;
+        }
+
+        return hiddenCount;
+    }
+
     function restoreHiddenComments(reason) {
         const selector = `[${commentFilter.processedAttribute}]`;
 
@@ -2495,6 +2572,19 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
                 if (!checked) {
                     restoreHiddenComments(commentFilter.reasonResolved);
+                }
+            }
+        );
+
+        const outdatedToggleRow = createToggleRow(
+            "Hide outdated comments",
+            "Removes comment threads marked as Outdated.",
+            isHideOutdatedEnabled(),
+            (checked) => {
+                setHideOutdatedEnabled(checked);
+
+                if (!checked) {
+                    restoreHiddenComments(commentFilter.reasonOutdated);
                 }
             }
         );
@@ -2755,6 +2845,7 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
 
         body.appendChild(authorToggleRow);
         body.appendChild(resolvedToggleRow);
+        body.appendChild(outdatedToggleRow);
         body.appendChild(notificationsToggleRow);
         body.appendChild(themeSelectField);
         body.appendChild(fontSelectField);
@@ -3271,7 +3362,9 @@ if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.onChanged)
             const activityHidden = hideBlockedActivity();
             const resolvedHidden = hideResolvedComments();
             const resolvedActivityHidden = hideResolvedActivity();
-            const hiddenCount = authorHidden + activityHidden + resolvedHidden + resolvedActivityHidden;
+            const outdatedHidden = hideOutdatedComments();
+            const outdatedActivityHidden = hideOutdatedActivity();
+            const hiddenCount = authorHidden + activityHidden + resolvedHidden + resolvedActivityHidden + outdatedHidden + outdatedActivityHidden;
 
             if (hiddenCount > 0) {
                 notifyCommentsHidden(hiddenCount);

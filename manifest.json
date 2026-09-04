@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Bitbucket Diff Enhancer",
-  "version": "1.10.2",
+  "version": "1.11.0",
   "description": "Extract Bitbucket Cloud PR diffs as readable unified-diff text and hide bot or resolved comments from pull requests.",
   "icons": {
     "16": "icons/icon16.png",

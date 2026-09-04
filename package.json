@@ -1,6 +1,6 @@
 {
   "name": "bitbucket-diff-enhancer",
-  "version": "1.10.2",
+  "version": "1.11.0",
   "private": true,
   "description": "Chrome extension and userscript that enhance Bitbucket Cloud pull request reviews.",
   "scripts": {
